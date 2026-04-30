@@ -1,4 +1,4 @@
-#Requires -Version 5.0
+﻿#Requires -Version 5.0
 <#
 .SYNOPSIS
 STM32 Serial Monitor Web Server - 实时串口监控Web界面

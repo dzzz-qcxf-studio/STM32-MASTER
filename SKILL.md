@@ -245,20 +245,22 @@ setup.bat
 
 ---
 
-### 方式二：Web UI 模式（推荐命令行使用）
+### 方式二：Web UI 模式（推荐）
 
-```powershell
-# 启动 Web 监控（自动打开浏览器）
-.\monitors\monitor_web.ps1 -SerialPort "COM3"
+直接运行 Node.js 脚本，自动检测端口并打开浏览器：
+
+```bash
+# 默认方式（自动选择端口，打开浏览器）
+node monitors/serial_monitor.js
 
 # 指定端口和波特率
-.\monitors\monitor_web.ps1 -SerialPort "COM3" -BaudRate 9600 -Port 8080
+node monitors/serial_monitor.js COM5 115200 8080
 
-# 不自动打开浏览器
-.\monitors\monitor_web.ps1 -SerialPort "COM3" -OpenBrowser $false
+# 或使用命名参数
+node monitors/serial_monitor.js --serial COM5 --baud 115200 --port 8080
 ```
 
-**Web UI 功能：**
+Web UI 功能：
 
 | 功能 | 说明 |
 |------|------|
