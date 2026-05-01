@@ -255,11 +255,10 @@ cppcheck --enable=warning,style fal/ common/
 
 代码模板中使用的占位符：
 
-| 占位符 | 说明 |
-|--------|------|
-| `{{MODULE_NAME}}` | 模块名（小写） |
-| `{{MODULE_NAME_UPPER}}` | 模块名（大写） |
-| `{{DATE}}` | 当前日期 |
-| `{{DEVICE}}` | 芯片型号 |
-| `{{TARGET}}` | 项目名称 |
-| `{{INTERFACE}}` | 调试接口（SWD/JTAG） |
+| 问题 | 解决方案 |
+|------|---------|
+| "No ST-Link found" | 检查 USB 连接 |
+| "ELF not found" | 先执行编译 |
+| 串口端口被占用 | 关闭其他串口程序 |
+| Keil UV4 not found | 检查 `D:\keil5\UV4\UV4.exe` 或用 `-UV4Path` 指定 |
+| Web 端口 8080 被占用 | 用 `-Port` 指定其他端口 |
