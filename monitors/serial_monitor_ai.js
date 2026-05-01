@@ -15,9 +15,27 @@ const { SerialPort } = require('serialport');
 const http = require('http');
 const { WebSocketServer } = require('ws');
 
+const PORT_FILE = 'used_port.txt';
 let DEFAULT_PORT = 'COM5';
 let DEFAULT_BAUD = 115200;
 let DEFAULT_WEB_PORT = 8080;
+
+function saveUsedPort(port) {
+    try {
+        const fs = require('fs');
+        fs.writeFileSync(PORT_FILE, String(port));
+    } catch {}
+}
+
+function getSavedPort() {
+    try {
+        const fs = require('fs');
+        if (fs.existsSync(PORT_FILE)) {
+            return parseInt(fs.readFileSync(PORT_FILE, 'utf8').trim());
+        }
+    } catch {}
+    return null;
+}
 
 // Parse command line arguments
 function parseArgs() {
@@ -59,7 +77,7 @@ let connected = false;
 // AI Chat history (for AI panel - user/ai对话式交互)
 const MAX_CHAT_HISTORY = 200;
 let aiChatHistory = [];
-const CHAT_HISTORY_FILE = 'ai_chat_history.json';
+const CHAT_HISTORY_FILE = require('path').join(__dirname, 'ai_chat_history.json');
 let chatHistoryFileWatcher = null;
 
 // Serial log buffer (for serial console - 不需要持久化)
@@ -270,6 +288,21 @@ const server = http.createServer(async (req, res) => {
     if (parsedUrl.pathname === '/api/connect') {
         const port = parsedUrl.searchParams.get('port');
         const baud = parseInt(parsedUrl.searchParams.get('baud')) || 115200;
+
+        // If already connected to this port, just return success (allow shared access)
+        if (serialPort && serialPort.isOpen && currentPort === port) {
+            console.log('[API] Already connected to ' + port + ', reusing connection');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, reused: true }));
+            return;
+        }
+
+        // If connected to a different port, close it first
+        if (serialPort && serialPort.isOpen) {
+            console.log('[API] Closing existing connection to ' + currentPort + ' before connecting to ' + port);
+            serialPort.close();
+        }
+
         openSerialPort(port, baud);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
@@ -403,6 +436,21 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    if (parsedUrl.pathname === '/api/shutdown') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+        broadcastToAll({ type: 'status', status: 'shutdown' });
+        setTimeout(() => {
+            if (chatHistoryFileWatcher) clearInterval(chatHistoryFileWatcher);
+            if (serialPort && serialPort.isOpen) serialPort.close();
+            server.close(() => {
+                console.log('Server shut down gracefully.');
+                process.exit(0);
+            });
+        }, 500);
+        return;
+    }
+
     // HTML page
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(getHtml());
@@ -420,30 +468,38 @@ function getHtml() {
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            /* Color System - Slate + Cyan */
-            --bg-base: #0a0e14;
-            --bg-surface: #0f172a;
-            --bg-elevated: #1e293b;
-            --bg-hover: #334155;
-            --border: #334155;
-            --border-subtle: #1e293b;
-            
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            
-            --accent: #22d3ee;
-            --accent-dim: rgba(34, 211, 238, 0.15);
-            --accent-glow: rgba(34, 211, 238, 0.4);
-            
-            --success: #4ade80;
-            --success-dim: rgba(74, 222, 128, 0.15);
-            
-            --error: #f87171;
-            --error-dim: rgba(248, 113, 113, 0.15);
-            
-            --warning: #fbbf24;
-            --warning-dim: rgba(251, 191, 36, 0.15);
+            /* Color System - Black & White + Terracotta #cc785c */
+            /* Brand: oklch(55%, 0.15, 35) — warm terracotta */
+
+            /* Background layers */
+            --bg-base: oklch(8% 0 0);
+            --bg-surface: oklch(12% 0 0);
+            --bg-elevated: oklch(18% 0 0);
+            --bg-hover: oklch(25% 0 0);
+
+            /* Borders */
+            --border: oklch(30% 0 0);
+            --border-subtle: oklch(18% 0 0);
+
+            /* Text */
+            --text-primary: oklch(95% 0 0);
+            --text-secondary: oklch(65% 0 0);
+            --text-muted: oklch(45% 0 0);
+
+            /* Brand accent — #cc785c in oklch */
+            --accent: oklch(55% 0.15 35);
+            --accent-dim: oklch(55% 0.12 35 / 15%);
+            --accent-glow: oklch(55% 0.12 35 / 40%);
+
+            /* Status — derived from accent hue */
+            --success: oklch(60% 0.12 145);
+            --success-dim: oklch(60% 0.10 145 / 15%);
+
+            --error: oklch(60% 0.18 25);
+            --error-dim: oklch(60% 0.15 25 / 15%);
+
+            --warning: oklch(70% 0.15 80);
+            --warning-dim: oklch(70% 0.12 80 / 15%);
             
             /* Typography */
             --font-ui: 'Plus Jakarta Sans', system-ui, sans-serif;
@@ -511,7 +567,7 @@ function getHtml() {
         .logo-mark {
             width: 36px;
             height: 36px;
-            background: linear-gradient(135deg, var(--accent) 0%, #06b6d4 100%);
+            background: var(--accent);
             border-radius: var(--radius-md);
             display: flex;
             align-items: center;
@@ -589,22 +645,22 @@ function getHtml() {
 
         .btn-primary {
             background: var(--accent);
-            color: var(--bg-base);
+            color: oklch(8% 0 0);
         }
 
         .btn-primary:hover {
-            background: #06b6d4;
+            background: oklch(50% 0.15 35);
             box-shadow: 0 0 20px var(--accent-glow);
         }
 
         .btn-danger {
             background: var(--error);
-            color: white;
+            color: oklch(98% 0 0);
         }
 
         .btn-danger:hover {
-            background: #ef4444;
-            box-shadow: 0 0 20px rgba(248, 113, 113, 0.4);
+            background: oklch(50% 0.18 25);
+            box-shadow: 0 0 20px oklch(60% 0.18 25 / 40%);
         }
 
         .status-badge {
@@ -935,17 +991,20 @@ function getHtml() {
         }
 
         .message.user {
-            background: linear-gradient(135deg, var(--accent) 0%, #06b6d4 100%);
-            color: var(--bg-base);
-            margin-left: var(--space-8);
+            background: var(--accent);
+            color: oklch(98% 0 0);
+            margin-right: var(--space-8);
+            margin-left: 40px;
             border-bottom-right-radius: var(--radius-sm);
         }
 
         .message.ai {
-            background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
-            color: #fff;
+            background: oklch(25% 0 0);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
             margin-left: var(--space-8);
-            border-bottom-right-radius: var(--radius-sm);
+            margin-right: 60px;
+            border-bottom-left-radius: var(--radius-sm);
         }
 
         .message.device {
@@ -1246,6 +1305,10 @@ function getHtml() {
                             <span class="api-method ws">WS</span>
                             <span class="api-path">/ws</span>
                         </div>
+                        <div class="api-endpoint">
+                            <span class="api-method get">GET</span>
+                            <span class="api-path">/api/shutdown</span>
+                        </div>
                     </div>
                     <div class="api-card" style="margin-top: 0;">
                         <div class="api-card-title">MCP 集成</div>
@@ -1333,13 +1396,12 @@ function getHtml() {
                     addChatMessage('user', data.content);
                     break;
                 case 'ai_message':
-                    // AI (MCP) sent message - show in AI chat panel
-                    console.log('[DEBUG handleMessage] ai_message, calling addChatMessage');
-                    addChatMessage('ai', data.content);
+                    // AI (MCP) sent message - show in device chat panel
+                    addChatMessage('device', data.content);
                     break;
                 case 'device_message':
                     // Device response - show in AI chat panel
-                    addChatMessage('device', data.content);
+                    addChatMessage('ai', data.content);
                     break;
                 case 'chat_history_reload':
                     // External change detected, reload the chat panel
@@ -1623,16 +1685,49 @@ function clearChatHistory() {
 </html>`;
 }
 
-// Handle server errors
+// Find available port (8080-8180) on EADDRINUSE
 server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
-        console.error(`\nError: Port ${DEFAULT_WEB_PORT} is already in use.`);
-        console.error(`Please close the other application or use: node serial_monitor_ai.js --port 8081\n`);
+        let foundPort = null;
+        for (let p = 8080; p <= 8180; p++) {
+            try {
+                server.listen(p, () => {
+                    DEFAULT_WEB_PORT = p;
+                    saveUsedPort(p);
+                    onServerReady();
+                });
+                foundPort = p;
+                return;
+            } catch {}
+        }
+        if (!foundPort) {
+            console.error('No available port found (8080-8180 all occupied). Kill stale processes first.');
+            process.exit(1);
+        }
     } else {
-        console.error(`\nServer error: ${err.message}`);
+        console.error('Server error: ' + err.message);
+        process.exit(1);
     }
-    process.exit(1);
 });
+
+function onServerReady() {
+    console.log('   Web UI: http://localhost:' + DEFAULT_WEB_PORT);
+    console.log('   Serial: ' + DEFAULT_PORT + ' @ ' + DEFAULT_BAUD);
+    console.log('   API: http://localhost:' + DEFAULT_WEB_PORT + '/api/...');
+    console.log('   WS: ws://localhost:' + DEFAULT_WEB_PORT + '/ws');
+    console.log('   MCP: node serial_mcp.js --port ' + DEFAULT_WEB_PORT);
+    console.log('   MCP service URL: http://localhost:' + DEFAULT_WEB_PORT);
+    console.log('========================================\n');
+
+    try {
+        require('child_process').exec('start http://localhost:' + DEFAULT_WEB_PORT);
+    } catch {}
+
+    console.log('Connecting to ' + DEFAULT_PORT + '...');
+    openSerialPort(DEFAULT_PORT, DEFAULT_BAUD);
+}
+
+// Moved server.listen into startServer() to prevent double-listen
 
 // WebSocket server
 const wss = new WebSocketServer({ server: server });
