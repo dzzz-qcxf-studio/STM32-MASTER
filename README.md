@@ -49,29 +49,66 @@ AI 直接通过 MCP 协议控制串口，实时收发数据
 ### 编译 + 烧录
 
 ```powershell
-# 基本用法
+.\scripts\build_flash.ps1 -ProjectDir "F:\path\to\project"
+```
+
+```
+✅ 编译成功
+📊 固件大小：
+   text    data     bss     dec     hex filename
+  45678    1234    5678   52590    cd6e build/Debug/test2.elf
+
+💾 Flash 占用: 46912 / 524288 bytes (8.9%)
+📦 RAM 占用:   6912 / 131072 bytes (5.3%)
+```
+
+编译失败时自动诊断：
+
+```
+📍 错误 1: Core/Src/main.c:45
+   undefined reference to 'HAL_TIM_PWM_Start'
+   💡 分析: CubeMX 中可能没有启用 TIM PWM 功能
+   🔧 建议: 在 CubeMX 中启用对应的 TIM 外设
+```
+
+### 2. Flash — 烧录
+
+通过 STM32CubeProgrammer CLI（SWD）烧录，支持自动验证。
+
+```powershell
+# 一键编译+烧录
 .\scripts\build_flash.ps1 -ProjectDir "F:\path\to\project"
 
-# 跳过安全检查（危险!）
-.\scripts\build_flash.ps1 -ProjectDir "F:\path\to\project" -SkipSafetyCheck
+# 仅烧录
+.\scripts\build_flash.ps1 -ProjectDir "F:\path\to\project" -SkipBuild
 ```
 
-### GPIO 安全检查（可独立运行）
+### 3. Monitor — 串口监控
+
+三种模式，按需选择：
+
+| 模式 | 启动方式 | 特点 |
+|------|---------|------|
+| **MCP 工具** | AI 直接调用 | `serial_connect()` / `serial_send()` / `serial_history()` |
+| **Web UI** | `node monitors/serial_monitor_ai.js` | 浏览器可视化，实时推送，过滤搜索，日志下载 |
+| **命令行** | `.\monitors\monitor_serial.ps1` | 轻量级，正则过滤，文件日志 |
+
+### 4. Debug — 调试
 
 ```powershell
-.\scripts\check_gpio_safety.ps1 -ProjectDir "F:\path\to\project"
+# GDB 调试
+.\scripts\start_debug.ps1 -ProjectDir "<path>"
+
+# RTT Viewer（需 J-Link）
+.\scripts\start_debug.ps1 -ProjectDir "<path>" -RTT
+
+# 串口 Shell
+.\scripts\start_debug.ps1 -ProjectDir "<path>" -Shell
 ```
 
-### 启动调试
+支持 VS Code F5 一键调试（自动生成 `launch.json`）。
 
-```powershell
-.\scripts\start_debug.ps1 -ProjectDir "F:\path\to"           # VSCode 调试
-.\scripts\start_debug.ps1 -ProjectDir "F:\path\to" -GDBClient  # GDB 终端
-.\scripts\start_debug.ps1 -ProjectDir "F:\path\to" -RTT      # RTT Viewer
-.\scripts\start_debug.ps1 -ProjectDir "F:\path\to" -Shell     # 串口 Shell
-```
-
-### 串口监控
+### 5. Format — 代码格式化
 
 ```powershell
 # 启动 Web UI
@@ -174,56 +211,27 @@ stm32_master/
 
 自动检测（来自 STM32Cube bundles）：
 
-| 工具 | 路径 |
+| 模板 | 外设 |
 |------|------|
-| CMake | `%LOCALAPPDATA%\stm32cube\bundles\cmake\*\bin\cmake.exe` |
-| STM32_Programmer_CLI | `%LOCALAPPDATA%\stm32cube\bundles\programmer\*\bin\STM32_Programmer_CLI.exe` |
-| arm-none-eabi-gdb | `%LOCALAPPDATA%\stm32cube\bundles\gnu-gdb-for-stm32\*\bin\arm-none-eabi-gdb.exe` |
-| ST-LINK_gdbserver | `%LOCALAPPDATA%\stm32cube\bundles\stlink-gdbserver\*\bin\ST-LINK_gdbserver.exe` |
-| Keil UV4 | `D:\keil5\UV4\UV4.exe`（可配置） |
+| `device_gpio.c` | GPIO 读写 |
+| `device_uart.c` | UART 通信 |
+| `device_spi.c` | SPI 驱动 |
+| `device_iic.c` | I2C 驱动 |
+| `device_adc.c` | ADC 采集 |
+| `device_tim.c` | 定时器/PWM |
+| `device_can.c` | CAN 总线 |
+| `fal_module.c/h` | FreeRTOS 任务框架 |
 
----
+## 支持的项目类型
 
-## GDB 调试命令
-
-```bash
-target remote localhost:61234    # 连接调试器
-file build/Debug/test2.elf     # 加载符号文件
-break main                      # 设置断点
-continue                        # 运行
-next                            # 单步
-print <var>                     # 打印变量
-info registers                  # 查看寄存器
-```
-
----
-
-## 常见问题
-
-| 问题 | 解决方案 |
+| 类型 | 检测方式 |
 |------|---------|
-| `No ST-Link found` | 检查 USB 连接 |
-| `ELF not found` | 先执行编译 |
-| 串口端口被占用 | 关闭其他串口程序（XCOM、串口助手等） |
-| `Keil UV4 not found` | 检查 `D:\keil5\UV4\UV4.exe` 或用 `-UV4Path` 指定 |
-| Web 端口 8080 被占用 | 用 `-Port` 指定其他端口 |
+| **Keil MDK** | `Projects/MDK-ARM/*.uvprojx` |
+| **CMake/Ninja** | 根目录 `CMakeLists.txt` |
 
----
+## 工具依赖（自动检测）
 
-## 硬编码路径提示
-
-| 工具 | 默认路径 | 覆盖方式 |
-|------|---------|---------|
-| Keil UV4 | `D:\keil5\UV4\UV4.exe` | `-UV4Path` 参数 |
-| Web UI 端口 | `8080` | `-Port` 参数 |
-
----
-
-## 模板文件
-
-`templates/` 目录下包含代码生成模板：
-
-| 模板 | 用途 |
+| 工具 | 用途 |
 |------|------|
 | `fal_module.h/.c` | FAL 业务模块框架 |
 | `device_uart.c` | UART 设备驱动 |
