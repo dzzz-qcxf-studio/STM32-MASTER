@@ -20,6 +20,26 @@ serial_send(command="123")
 
 ---
 
+## Web API
+
+### HTTP API
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/ports` | GET | 列出可用串口 |
+| `/api/connect?port=X&baud=Y` | GET | 连接串口 |
+| `/api/send?data=...&from=ai` | GET | 发送命令 |
+| `/api/chat/history` | GET | 获取对话历史 |
+
+**发送命令（重要）**：
+```
+GET /api/send?data=hello&from=ai
+```
+
+`from=ai` 参数必须加上，否则消息会显示为用户发送而非 AI 发送。
+
+---
+
 ## Web UI（备用）
 
 启动后访问 http://localhost:8080：

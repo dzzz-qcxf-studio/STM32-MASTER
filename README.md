@@ -38,6 +38,14 @@ AI 直接通过 MCP 协议控制串口，实时收发数据
 
 ## 快速开始
 
+### 前置条件：模板工程
+
+编译前需要项目具备可编译的工程结构。如果项目目录中没有工程文件，stm32-master 会主动询问：
+
+1. **使用 CubeMX 生成** — 用 STM32CubeMX 创建 Keil/CMake 工程
+2. **提供已有模板工程** — 将已有的工程复制到项目目录
+3. **指定工程路径** — 工程在其他位置，告诉 stm32-master 路径
+
 ### 编译 + 烧录
 
 ```powershell
@@ -82,16 +90,20 @@ node monitors/serial_monitor_ai.js --serial COM11 --baud 115200 --port 8080
 
 ```mermaid
 flowchart TD
-    A[开始] --> B{选择项目类型}
-    B -->|Keil MDK| C[使用 UV4 编译]
-    B -->|CMake/Ninja| D[使用 Ninja 编译]
-    C --> E[生成 ELF/AXF]
-    D --> E
-    E --> F[GPIO 安全检查]
-    F -->|检查失败| G[阻止烧录<br/>显示错误]
-    F -->|检查通过| H[烧录固件]
-    H --> I[成功]
-    G --> J[修复错误后重试]
+    A[开始] --> B{项目是否就绪?}
+    B -->|有工程文件| C{选择项目类型}
+    B -->|缺少工程文件| B1[询问用户: CubeMX生成/提供模板/指定路径]
+    B1 --> B2[用户准备工程]
+    B2 --> C
+    C -->|Keil MDK| D[使用 UV4 编译]
+    C -->|CMake/Ninja| E[使用 Ninja 编译]
+    D --> F[生成 ELF/AXF]
+    E --> F
+    F --> G[GPIO 安全检查]
+    G -->|检查失败| H[阻止烧录<br/>显示错误]
+    G -->|检查通过| I[烧录固件]
+    I --> J[成功]
+    H --> K[修复错误后重试]
 ```
 
 ### 调试流程
@@ -253,14 +265,16 @@ cppcheck --enable=warning,style fal/ common/
 
 ---
 
-## 占位符
+## 工作流位置
 
-代码模板中使用的占位符：
+```
+embedded-pipeline（入口 + 目录选择 + 模式判断）
+  │
+  ├─ 新建模式 → requirements-master → diagram-master → stm32-master
+  │                                                    (当前位置)
+  │
+  └─ 迭代模式 → iteration-master → (diagram-master) → stm32-master
+                                                     (当前位置)
+```
 
-| 问题 | 解决方案 |
-|------|---------|
-| "No ST-Link found" | 检查 USB 连接 |
-| "ELF not found" | 先执行编译 |
-| 串口端口被占用 | 关闭其他串口程序 |
-| Keil UV4 not found | 检查 `D:\keil5\UV4\UV4.exe` 或用 `-UV4Path` 指定 |
-| Web 端口 8080 被占用 | 用 `-Port` 指定其他端口 |
+stm32-master 是管道的**终端 skill**，负责所有代码编写和编译烧录。迭代模式下禁止 iteration-master 自己写代码，必须通过本 skill 完成。

@@ -54,6 +54,39 @@ stm32_master/
 
 ## 编译+烧录（一键）
 
+### 前置检查：项目是否就绪
+
+**在编译之前，必须先检查项目结构。** 如果项目不具备可编译条件，必须先让用户准备模板工程。
+
+**检查步骤：**
+
+1. 检查 `projectPath` 下是否存在源码目录（`Core/Src/`、`fal/`、`src/`）
+2. 检查是否存在工程文件：
+   - Keil MDK：`Projects/MDK-ARM/*.uvprojx`
+   - CMake：根目录 `CMakeLists.txt`
+3. 如果**缺少工程文件但有源码** → 询问用户：
+
+```
+AskUserQuestion({
+  questions: [
+    {
+      question: "项目目录中没有找到可编译的工程文件，请选择如何创建：",
+      header: "工程模板",
+      options: [
+        { label: "使用 CubeMX 生成", description: "用 STM32CubeMX 生成 Keil/CMake 工程，然后告诉我工程目录位置" },
+        { label: "提供已有模板工程", description: "将已有的 Keil 或 CMake 工程复制到项目目录" },
+        { label: "指定工程路径", description: "工程文件在其他位置，我来告诉你路径" }
+      ],
+      multiSelect: false
+    }
+  ]
+})
+```
+
+4. 如果**既没有源码也没有工程文件** → 告知用户："请先准备好 STM32 模板工程（可用 CubeMX 生成），然后将工程放到项目目录中，或者告诉我工程所在路径。"
+
+**只有在项目就绪检查通过后，才能执行编译。**
+
 ### 使用方式
 
 ```powershell
